@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sermon Translator | Live</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <div class="app-container">
+        <header>
+            <div class="logo">
+                <span class="icon">Translation</span>
+                <span class="badge">LIVE</span>
+            </div>
+            <div class="status-indicator" id="connectionStatus">
+                <span class="dot"></span>
+                <span class="text">Disconnected</span>
+            </div>
+        </header>
+
+        <main>
+            <div class="visualizer-container">
+                <canvas id="audioVisualizer"></canvas>
+            </div>
+
+            <div class="controls-container">
+                <div class="language-selector">
+                    <label>Source</label>
+                    <select id="sourceLang">
+                        <option value="fr" selected>French 🇫🇷</option>
+                        <option value="en">English 🇺🇸</option>
+                        <option value="de">German 🇩🇪</option>
+                    </select>
+                </div>
+
+                <button id="recordButton" class="magic-button">
+                    <div class="icon-mic">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                            <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                            <line x1="12" y1="19" x2="12" y2="23"></line>
+                            <line x1="8" y1="23" x2="16" y2="23"></line>
+                        </svg>
+                    </div>
+                    <span class="label">Start Live Translation</span>
+                </button>
+
+                <div class="language-selector">
+                    <label>Target</label>
+                    <select id="targetLang">
+                        <option value="de" selected>German 🇩🇪</option>
+                        <option value="en">English 🇺🇸</option>
+                        <option value="es">Spanish 🇪🇸</option>
+                        <option value="fr">French 🇫🇷</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="transcript-area">
+                <div class="transcript-box source">
+                    <h3>Original</h3>
+                    <p id="originalText" class="placeholder">Waiting for speech...</p>
+                </div>
+                <div class="transcript-box target">
+                    <h3>Translation</h3>
+                    <p id="translatedText" class="placeholder">Translation will appear here...</p>
+                </div>
+            </div>
+        </main>
+    </div>
+    <script src="app.js"></script>
+</body>
+
+</html>

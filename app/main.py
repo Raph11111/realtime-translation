@@ -77,8 +77,10 @@ async def broadcast_translation(text: str):
 async def broadcast_audio(chunk: bytes):
     """Callback to broadcast TTS audio to connected clients."""
     if not transcript_clients:
+        logger.warning(f"Audio generated ({len(chunk)} bytes) but no clients connected!")
         return
 
+    logger.info(f"Broadcasting audio chunk ({len(chunk)} bytes) to {len(transcript_clients)} clients")
     disconnected_clients = set()
     for client in transcript_clients:
         try:
@@ -101,7 +103,7 @@ async def lifespan(app: FastAPI):
     
     try:
         # Start services
-        await transcription_service.start()
+        await transcription_service.start(source_lang="fr")
         await audio_service.start_stream()
         
         # Start background task to feed audio to transcription
@@ -123,10 +125,13 @@ async def feed_audio_to_transcription():
     while True:
         try:
             chunk = await audio_service.get_audio_chunk()
-            await transcription_service.send_audio(chunk)
+            if chunk:
+                await transcription_service.send_audio(chunk)
         except Exception as e:
             logger.error(f"Error feeding audio to transcription: {e}")
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(0.01) # Short sleep to prevent tight loop on error
+
+from fastapi.staticfiles import StaticFiles
 
 app = FastAPI(title="Sermon Translator", lifespan=lifespan)
 
@@ -138,6 +143,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Mount static files
+app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 @app.get("/")
 async def root():
@@ -171,6 +179,7 @@ async def audio_websocket(websocket: WebSocket):
 async def transcript_websocket(websocket: WebSocket):
     """
     WebSocket endpoint that streams transcripts to the client.
+    Also handles configuration messages from the client.
     """
     await websocket.accept()
     transcript_clients.add(websocket)
@@ -178,7 +187,21 @@ async def transcript_websocket(websocket: WebSocket):
     
     try:
         while True:
-            await websocket.receive_text() # Keep connection alive
+            data = await websocket.receive_text()
+            try:
+                message = json.loads(data)
+                if message.get("type") == "config":
+                    # Handle configuration changes
+                    if "target_lang" in message:
+                        new_lang = message["target_lang"]
+                        logger.info(f"Client requested target language change to: {new_lang}")
+                        # In a real multi-user system, we'd store this per connection.
+                        # For this broadcast demo, we'll update the global service default.
+                        translation_service.default_target_lang = new_lang
+                        
+            except json.JSONDecodeError:
+                pass # Keep alive ping
+                
     except WebSocketDisconnect:
         logger.info("Client disconnected from transcripts")
         transcript_clients.remove(websocket)

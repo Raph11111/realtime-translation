@@ -10,7 +10,12 @@ logger = logging.getLogger(__name__)
 
 class AudioCaptureService:
     def __init__(self):
-        self.device_index = int(os.getenv("INPUT_DEVICE_INDEX", 1))
+        # Use default device if not specified
+        self.device_index = os.getenv("INPUT_DEVICE_INDEX")
+        if self.device_index:
+            self.device_index = int(self.device_index)
+        else:
+            self.device_index = None # Let sounddevice choose default
         self.samplerate = 16000
         self.channels = 1
         self.blocksize = 1024  # Adjust for latency vs stability
@@ -27,6 +32,12 @@ class AudioCaptureService:
         # indata is a numpy array of float32 by default
         # We might need int16 for some APIs, but float32 is standard for processing
         # Deepgram usually accepts linear16 (int16)
+        
+        # Calculate RMS (volume) for debugging
+        rms = np.sqrt(np.mean(indata**2))
+        if rms > 0.01: # Only log if there's some sound
+            # logger.info(f"Audio Level (RMS): {rms:.4f}")
+            pass
         
         # Convert float32 [-1, 1] to int16 [-32768, 32767]
         audio_data = (indata * 32767).astype(np.int16)

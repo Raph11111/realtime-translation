@@ -1,6 +1,7 @@
 import os
 import logging
 import asyncio
+from collections import deque
 from groq import AsyncGroq
 
 logger = logging.getLogger(__name__)
@@ -8,7 +9,7 @@ logger = logging.getLogger(__name__)
 class TranslationService:
     def __init__(self):
         self.api_key = os.getenv("GROQ_API_KEY")
-        self.target_lang = os.getenv("TARGET_LANGUAGE", "de")
+        self.default_target_lang = os.getenv("TARGET_LANGUAGE", "de")
         self.client = None
         
         if self.api_key:
@@ -18,24 +19,48 @@ class TranslationService:
 
         self.callbacks = []
         
-        # System prompt optimized for speed and theological accuracy
-        self.system_prompt = f"""You are a professional simultaneous interpreter for a church service. 
-Translate the following French text into {self.target_lang} immediately.
+        # Context buffer: Stores tuples of (source_text, translated_text)
+        # We keep the last 3 turns to provide context without blowing up the prompt.
+        self.context_buffer = deque(maxlen=3)
+        
+        # Base system prompt
+        self.base_system_prompt = """You are a professional simultaneous interpreter for a church service. 
+Translate the following text into {target_lang} immediately.
+
 Rules:
 1. Be concise but accurate.
 2. Maintain the theological tone (solemn, respectful).
 3. Do not explain, just translate.
 4. Handle religious terms correctly (e.g., 'Salut' -> 'Heil'/'Salvation', not 'Hi').
+5. Use the provided context to resolve ambiguities (pronouns, references).
 """
 
     def register_callback(self, callback):
         """Register a callback to receive translated text."""
         self.callbacks.append(callback)
 
-    async def translate(self, text: str):
-        """Translates text using Groq Llama 3."""
+    def _get_context_str(self):
+        """Formats the context buffer into a string for the prompt."""
+        if not self.context_buffer:
+            return ""
+        
+        context_str = "\nContext (previous conversation):\n"
+        for source, target in self.context_buffer:
+            context_str += f"Original: {source}\nTranslation: {target}\n"
+        return context_str
+
+    async def translate(self, text: str, target_lang: str = None):
+        """Translates text using Groq Llama 3 with context."""
         if not self.client or not text.strip():
             return
+
+        target_lang = target_lang or self.default_target_lang
+        
+        # Build the dynamic system prompt
+        system_prompt = self.base_system_prompt.format(target_lang=target_lang)
+        context_str = self._get_context_str()
+        
+        full_user_message = f"{context_str}\nOriginal: {text}"
 
         try:
             # Call Groq API
@@ -43,11 +68,11 @@ Rules:
                 messages=[
                     {
                         "role": "system",
-                        "content": self.system_prompt,
+                        "content": system_prompt,
                     },
                     {
                         "role": "user",
-                        "content": text,
+                        "content": full_user_message,
                     }
                 ],
                 model="llama-3.3-70b-versatile",
@@ -60,6 +85,9 @@ Rules:
 
             translated_text = chat_completion.choices[0].message.content.strip()
             
+            # Update context buffer
+            self.context_buffer.append((text, translated_text))
+            
             # Notify callbacks
             for callback in self.callbacks:
                 await callback(translated_text)
@@ -67,10 +95,10 @@ Rules:
         except Exception as e:
             logger.error(f"Translation error: {e}")
 
-    async def process_transcript(self, text: str, is_final: bool):
+    async def process_transcript(self, text: str, is_final: bool, target_lang: str = None):
         """
         Called when a new transcript is received.
         We only translate 'final' transcripts to save API calls and reduce jitter.
         """
         if is_final:
-            await self.translate(text)
+            await self.translate(text, target_lang)

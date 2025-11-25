@@ -41,26 +41,12 @@ class TTSService:
         if not text.strip():
             return
 
-        # Try ElevenLabs
-        if self.elevenlabs_client:
-            try:
-                loop = asyncio.get_running_loop()
-                def _stream_generator():
-                    return self.elevenlabs_client.text_to_speech.convert(
-                        text=text,
-                        voice_id=self.voice_id,
-                        model_id=self.model_id,
-                        output_format="mp3_44100_128"
-                    )
-                
-                audio_stream = await loop.run_in_executor(None, _stream_generator)
-                for chunk in audio_stream:
-                    if chunk:
-                        for callback in self.callbacks:
-                            await callback(chunk)
-                return # Success
-            except Exception as e:
-                logger.error(f"ElevenLabs TTS error: {e}. Falling back to OpenAI.")
+        # Try ElevenLabs - DISABLED per user request
+        # if self.elevenlabs_client:
+        #     try:
+        #         ...
+        #     except Exception as e:
+        #         logger.error(f"ElevenLabs TTS error: {e}. Falling back to OpenAI.")
 
         # Fallback to OpenAI
         if self.openai_client:
