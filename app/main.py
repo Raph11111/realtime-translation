@@ -52,8 +52,9 @@ async def broadcast_transcript(text: str, is_final: bool):
     # 2. Send to Translation Service
     await translation_service.process_transcript(text, is_final)
 
-async def broadcast_translation(text: str):
+async def broadcast_translation(text: str, voice: str = None):
     """Callback to broadcast translations to connected clients."""
+    logger.info(f"Broadcasting translation: '{text[:20]}...' with voice: {voice}")
     # 1. Broadcast text translation
     if transcript_clients:
         message = json.dumps({
@@ -72,7 +73,7 @@ async def broadcast_translation(text: str):
             transcript_clients.remove(client)
 
     # 2. Send to TTS Service
-    await tts_service.process_translation(text)
+    await tts_service.process_translation(text, voice)
 
 async def broadcast_audio(chunk: bytes):
     """Callback to broadcast TTS audio to connected clients."""
@@ -147,9 +148,11 @@ app.add_middleware(
 # Mount static files
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
+from fastapi.responses import FileResponse
+
 @app.get("/")
 async def root():
-    return {"status": "online", "service": "Sermon Translator"}
+    return FileResponse("app/static/index.html")
 
 @app.websocket("/ws/audio")
 async def audio_websocket(websocket: WebSocket):
@@ -195,9 +198,14 @@ async def transcript_websocket(websocket: WebSocket):
                     if "target_lang" in message:
                         new_lang = message["target_lang"]
                         logger.info(f"Client requested target language change to: {new_lang}")
-                        # In a real multi-user system, we'd store this per connection.
-                        # For this broadcast demo, we'll update the global service default.
                         translation_service.default_target_lang = new_lang
+                    
+                    if "target_voice" in message:
+                        new_voice = message["target_voice"]
+                        logger.info(f"Client requested target voice change to: {new_voice}")
+                        # Store voice in translation service (or pass it dynamically)
+                        # For simplicity, we'll add a default_voice attribute to TranslationService
+                        translation_service.default_target_voice = new_voice
                         
             except json.JSONDecodeError:
                 pass # Keep alive ping

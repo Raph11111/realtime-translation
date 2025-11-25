@@ -1,10 +1,33 @@
+// Global Error Handler - MUST BE FIRST
+window.onerror = function (message, source, lineno, colno, error) {
+    const status = document.getElementById('connectionStatus');
+    if (status) {
+        status.innerHTML = `<span class="text" style="color: #ef4444;">Error: ${message}</span>`;
+        status.classList.add('error');
+    }
+    console.error("Global Error:", message, error);
+};
+
+// Debug: Set status to Initializing
+const statusDebug = document.getElementById('connectionStatus');
+if (statusDebug) {
+    statusDebug.querySelector('.text').textContent = 'Initializing JS...';
+}
+
 // DOM Elements
 const recordButton = document.getElementById('recordButton');
 const connectionStatus = document.getElementById('connectionStatus');
 const originalText = document.getElementById('originalText');
 const translatedText = document.getElementById('translatedText');
 const targetLangSelect = document.getElementById('targetLang');
+const targetVoiceSelect = document.getElementById('targetVoice');
 const canvas = document.getElementById('audioVisualizer');
+
+// Check for missing elements
+if (!recordButton || !connectionStatus || !targetLangSelect || !targetVoiceSelect || !canvas) {
+    throw new Error("Missing required DOM elements!");
+}
+
 const ctx = canvas.getContext('2d');
 
 // State
@@ -211,9 +234,12 @@ async function toggleRecording() {
 function updateConfig() {
     if (wsTranscripts && wsTranscripts.readyState === WebSocket.OPEN) {
         const targetLang = targetLangSelect.value;
+        const targetVoice = targetVoiceSelect.value;
+
         wsTranscripts.send(JSON.stringify({
             type: 'config',
-            target_lang: targetLang
+            target_lang: targetLang,
+            target_voice: targetVoice
         }));
     }
 }
@@ -221,6 +247,7 @@ function updateConfig() {
 // Event Listeners
 recordButton.addEventListener('click', toggleRecording);
 targetLangSelect.addEventListener('change', updateConfig);
+targetVoiceSelect.addEventListener('change', updateConfig);
 
 // Init
 connectWebSocket();

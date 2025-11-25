@@ -10,6 +10,7 @@ class TranslationService:
     def __init__(self):
         self.api_key = os.getenv("GROQ_API_KEY")
         self.default_target_lang = os.getenv("TARGET_LANGUAGE", "de")
+        self.default_target_voice = "alloy" # Default voice
         self.client = None
         
         if self.api_key:
@@ -49,7 +50,18 @@ Rules:
             context_str += f"Original: {source}\nTranslation: {target}\n"
         return context_str
 
-    async def translate(self, text: str, target_lang: str = None):
+    async def process_transcript(self, text: str, is_final: bool, target_lang: str = None, target_voice: str = None):
+        """
+        Called when a new transcript is received.
+        We only translate 'final' transcripts to save API calls and reduce jitter.
+        """
+        if is_final:
+            # Use defaults if not provided
+            lang = target_lang or self.default_target_lang
+            voice = target_voice or self.default_target_voice
+            await self.translate(text, lang, voice)
+
+    async def translate(self, text: str, target_lang: str = None, target_voice: str = None):
         """Translates text using Groq Llama 3 with context."""
         if not self.client or not text.strip():
             return
@@ -90,15 +102,7 @@ Rules:
             
             # Notify callbacks
             for callback in self.callbacks:
-                await callback(translated_text)
+                await callback(translated_text, target_voice)
                 
         except Exception as e:
             logger.error(f"Translation error: {e}")
-
-    async def process_transcript(self, text: str, is_final: bool, target_lang: str = None):
-        """
-        Called when a new transcript is received.
-        We only translate 'final' transcripts to save API calls and reduce jitter.
-        """
-        if is_final:
-            await self.translate(text, target_lang)

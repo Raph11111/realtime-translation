@@ -31,15 +31,29 @@ class TTSService:
         self.callbacks = []
         self.voice_id = "21m00Tcm4TlvDq8ikWAM" 
         self.model_id = "eleven_turbo_v2_5"
+        
+        # Voice Mapping for OpenAI
+        self.voice_mapping = {
+            "alloy": "alloy",       # Neutral
+            "echo": "echo",         # Male
+            "fable": "fable",       # British-ish
+            "onyx": "onyx",         # Deep Male
+            "nova": "nova",         # Female
+            "shimmer": "shimmer"    # Female
+        }
+        self.default_voice = "alloy"
 
     def register_callback(self, callback):
         """Register a callback to receive audio chunks."""
         self.callbacks.append(callback)
 
-    async def generate_audio(self, text: str):
+    async def generate_audio(self, text: str, voice: str = None):
         """Generates audio stream from text, trying ElevenLabs first, then OpenAI."""
         if not text.strip():
             return
+
+        # Map user voice to OpenAI voice ID
+        openai_voice = self.voice_mapping.get(voice, self.default_voice)
 
         # Try ElevenLabs - DISABLED per user request
         # if self.elevenlabs_client:
@@ -53,7 +67,7 @@ class TTSService:
             try:
                 response = await self.openai_client.audio.speech.create(
                     model="tts-1",
-                    voice="alloy",
+                    voice=openai_voice,
                     input=text,
                     response_format="mp3"
                 )
@@ -71,6 +85,6 @@ class TTSService:
         else:
             logger.error("No TTS clients available.")
 
-    async def process_translation(self, text: str):
+    async def process_translation(self, text: str, voice: str = None):
         """Called when a new translation is received."""
-        await self.generate_audio(text)
+        await self.generate_audio(text, voice)
