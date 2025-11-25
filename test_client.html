@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Sermon Translation Test (Audio)</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .container {
+            display: flex;
+            gap: 20px;
+        }
+
+        .box {
+            flex: 1;
+            border: 1px solid #ccc;
+            padding: 20px;
+            height: 500px;
+            overflow-y: auto;
+            background: #f9f9f9;
+            border-radius: 8px;
+        }
+
+        h2 {
+            margin-top: 0;
+        }
+
+        .final {
+            color: black;
+            margin-bottom: 10px;
+        }
+
+        .interim {
+            color: #888;
+            font-style: italic;
+        }
+
+        .translation {
+            color: #0056b3;
+            font-weight: 500;
+            margin-bottom: 10px;
+        }
+
+        .status {
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Live Sermon Translation (Audio Enabled)</h1>
+    <div id="connection-status" class="status">Status: Disconnected</div>
+    <button id="start-audio">Enable Audio Playback</button>
+
+    <div class="container">
+        <div class="box">
+            <h2>Original (French)</h2>
+            <div id="original-box">
+                <div id="final-transcripts"></div>
+                <div id="interim-transcript" class="interim"></div>
+            </div>
+        </div>
+        <div class="box">
+            <h2>Translation (German)</h2>
+            <div id="translation-box"></div>
+        </div>
+    </div>
+
+    <script>
+        const statusDiv = document.getElementById('connection-status');
+        const finalDiv = document.getElementById('final-transcripts');
+        const interimDiv = document.getElementById('interim-transcript');
+        const translationDiv = document.getElementById('translation-box');
+        const startAudioBtn = document.getElementById('start-audio');
+
+        let audioContext;
+        let nextStartTime = 0;
+
+        startAudioBtn.onclick = () => {
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            startAudioBtn.disabled = true;
+            startAudioBtn.innerText = "Audio Enabled";
+        };
+
+        const ws = new WebSocket("ws://localhost:8000/ws/transcripts");
+        ws.binaryType = "arraybuffer";
+
+        ws.onopen = () => {
+            statusDiv.innerText = "Status: Connected";
+            statusDiv.style.color = "green";
+        };
+
+        ws.onmessage = async (event) => {
+            if (typeof event.data === "string") {
+                // Handle Text (JSON)
+                const data = JSON.parse(event.data);
+
+                if (data.type === 'transcript') {
+                    if (data.is_final) {
+                        const p = document.createElement('div');
+                        p.className = 'final';
+                        p.innerText = data.text;
+                        finalDiv.appendChild(p);
+                        interimDiv.innerText = "";
+                        finalDiv.parentElement.scrollTop = finalDiv.parentElement.scrollHeight;
+                    } else {
+                        interimDiv.innerText = data.text;
+                    }
+                } else if (data.type === 'translation') {
+                    const p = document.createElement('div');
+                    p.className = 'translation';
+                    p.innerText = data.text;
+                    translationDiv.appendChild(p);
+                    translationDiv.scrollTop = translationDiv.scrollHeight;
+                }
+            } else {
+                // Handle Audio (Binary)
+                if (!audioContext) return;
+
+                try {
+                    // Decode MP3 chunk from ElevenLabs
+                    const audioBuffer = await audioContext.decodeAudioData(event.data);
+
+                    const source = audioContext.createBufferSource();
+                    source.buffer = audioBuffer;
+                    source.connect(audioContext.destination);
+
+                    // Schedule playback
+                    const currentTime = audioContext.currentTime;
+                    if (nextStartTime < currentTime) {
+                        nextStartTime = currentTime;
+                    }
+                    source.start(nextStartTime);
+                    nextStartTime += audioBuffer.duration;
+                } catch (e) {
+                    console.error("Error decoding audio chunk:", e);
+                }
+            }
+        };
+
+        ws.onclose = () => {
+            statusDiv.innerText = "Status: Disconnected";
+            statusDiv.style.color = "red";
+        };
+    </script>
+</body>
+
+</html>
