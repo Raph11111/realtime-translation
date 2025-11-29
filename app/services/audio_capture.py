@@ -53,22 +53,43 @@ class AudioCaptureService:
         if self.is_running:
             return
 
-        logger.info(f"Starting audio stream on device {self.device_index}")
+        devices_to_try = []
+        if self.device_index is not None:
+            devices_to_try.append(self.device_index)
+        devices_to_try.append(None) # Default device
+
+        # Add first valid input device as last resort
         try:
-            self.stream = sd.InputStream(
-                device=self.device_index,
-                channels=self.channels,
-                samplerate=self.samplerate,
-                blocksize=self.blocksize,
-                callback=self._callback,
-                dtype="float32" # Capture as float32 for quality, convert later
-            )
-            self.stream.start()
-            self.is_running = True
-            logger.info("Audio stream started successfully")
-        except Exception as e:
-            logger.error(f"Failed to start audio stream: {e}")
-            raise
+            devices = sd.query_devices()
+            for i, d in enumerate(devices):
+                if d['max_input_channels'] > 0:
+                    if i not in devices_to_try:
+                        devices_to_try.append(i)
+                    break
+        except Exception:
+            pass
+
+        for dev_idx in devices_to_try:
+            logger.info(f"Attempting to start audio stream on device index: {dev_idx}")
+            try:
+                self.stream = sd.InputStream(
+                    device=dev_idx,
+                    channels=self.channels,
+                    samplerate=self.samplerate,
+                    blocksize=self.blocksize,
+                    callback=self._callback,
+                    dtype="float32"
+                )
+                self.stream.start()
+                self.is_running = True
+                logger.info(f"Audio stream started successfully on device {dev_idx}")
+                return # Success!
+            except Exception as e:
+                logger.warning(f"Failed to start on device {dev_idx}: {e}")
+        
+        # If we get here, all attempts failed
+        logger.error("Failed to start audio stream on any device.")
+        raise RuntimeError("Could not initialize audio input on any device.")
 
     def stop_stream(self):
         """Stops the audio stream."""

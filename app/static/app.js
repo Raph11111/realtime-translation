@@ -7,6 +7,15 @@ window.onerror = function (message, source, lineno, colno, error) {
     }
     console.error("Global Error:", message, error);
 };
+// Global Error Handler - MUST BE FIRST
+window.onerror = function (message, source, lineno, colno, error) {
+    const status = document.getElementById('connectionStatus');
+    if (status) {
+        status.innerHTML = `<span class="text" style="color: #ef4444;">Error: ${message}</span>`;
+        status.classList.add('error');
+    }
+    console.error("Global Error:", message, error);
+};
 
 // Debug: Set status to Initializing
 const statusDebug = document.getElementById('connectionStatus');
@@ -19,12 +28,13 @@ const recordButton = document.getElementById('recordButton');
 const connectionStatus = document.getElementById('connectionStatus');
 const originalText = document.getElementById('originalText');
 const translatedText = document.getElementById('translatedText');
+const sourceLangSelect = document.getElementById('sourceLang');
 const targetLangSelect = document.getElementById('targetLang');
 const targetVoiceSelect = document.getElementById('targetVoice');
 const canvas = document.getElementById('audioVisualizer');
 
 // Check for missing elements
-if (!recordButton || !connectionStatus || !targetLangSelect || !targetVoiceSelect || !canvas) {
+if (!recordButton || !connectionStatus || !sourceLangSelect || !targetLangSelect || !targetVoiceSelect || !canvas) {
     throw new Error("Missing required DOM elements!");
 }
 
@@ -233,11 +243,13 @@ async function toggleRecording() {
 // Configuration
 function updateConfig() {
     if (wsTranscripts && wsTranscripts.readyState === WebSocket.OPEN) {
+        const sourceLang = sourceLangSelect.value;
         const targetLang = targetLangSelect.value;
         const targetVoice = targetVoiceSelect.value;
 
         wsTranscripts.send(JSON.stringify({
             type: 'config',
+            source_lang: sourceLang,
             target_lang: targetLang,
             target_voice: targetVoice
         }));
@@ -246,6 +258,7 @@ function updateConfig() {
 
 // Event Listeners
 recordButton.addEventListener('click', toggleRecording);
+sourceLangSelect.addEventListener('change', updateConfig);
 targetLangSelect.addEventListener('change', updateConfig);
 targetVoiceSelect.addEventListener('change', updateConfig);
 

@@ -40,6 +40,10 @@ Rules:
         """Register a callback to receive translated text."""
         self.callbacks.append(callback)
 
+    def clear_context(self):
+        """Clears the context buffer."""
+        self.context_buffer.clear()
+
     def _get_context_str(self):
         """Formats the context buffer into a string for the prompt."""
         if not self.context_buffer:
@@ -66,10 +70,15 @@ Rules:
         if not self.client or not text.strip():
             return
 
-        target_lang = target_lang or self.default_target_lang
+        target_lang_code = target_lang or self.default_target_lang
+        
+        # Map code to full name, default to the code itself if not found
+        target_lang_name = LANGUAGE_CODE_TO_NAME.get(target_lang_code, target_lang_code)
+        
+        logger.info(f"Translating to: {target_lang_name} (code: {target_lang_code})")
         
         # Build the dynamic system prompt
-        system_prompt = self.base_system_prompt.format(target_lang=target_lang)
+        system_prompt = self.base_system_prompt.format(target_lang=target_lang_name)
         context_str = self._get_context_str()
         
         full_user_message = f"{context_str}\nOriginal: {text}"
@@ -106,3 +115,27 @@ Rules:
                 
         except Exception as e:
             logger.error(f"Translation error: {e}")
+
+# Language Code Mapping
+LANGUAGE_CODE_TO_NAME = {
+    "en": "English",
+    "de": "German",
+    "fr": "French",
+    "es": "Spanish",
+    "it": "Italian",
+    "pt": "Portuguese",
+    "ru": "Russian",
+    "ja": "Japanese",
+    "zh": "Chinese",
+    "nl": "Dutch",
+    "pl": "Polish",
+    "tr": "Turkish",
+    "ko": "Korean",
+    "hi": "Hindi",
+    "ar": "Arabic",
+    "uk": "Ukrainian",
+    "sv": "Swedish",
+    "da": "Danish",
+    "fi": "Finnish",
+    "no": "Norwegian"
+}

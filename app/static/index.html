@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="/static/style.css?v=reset">
 </head>
 
 <body>
@@ -20,6 +20,25 @@
             </div>
 
             <div class="controls-container">
+                <div class="language-selector">
+                    <label>Source Language</label>
+                    <select id="sourceLang">
+                        <option value="fr" selected>French 🇫🇷</option>
+                        <option value="en">English 🇺🇸</option>
+                        <option value="de">German 🇩🇪</option>
+                        <option value="es">Spanish 🇪🇸</option>
+                        <option value="it">Italian 🇮🇹</option>
+                        <option value="pt">Portuguese 🇵🇹</option>
+                        <option value="ru">Russian 🇷🇺</option>
+                        <option value="ja">Japanese 🇯🇵</option>
+                        <option value="zh">Chinese 🇨🇳</option>
+                        <option value="nl">Dutch 🇳🇱</option>
+                        <option value="pl">Polish 🇵🇱</option>
+                        <option value="tr">Turkish 🇹🇷</option>
+                        <option value="ko">Korean 🇰🇷</option>
+                        <option value="hi">Hindi 🇮🇳</option>
+                    </select>
+                </div>
                 <div class="language-selector">
                     <label>Target Language</label>
                     <select id="targetLang">
@@ -75,7 +94,7 @@
             </button>
         </div>
     </div>
-    <script src="/static/app.js"></script>
+    <script src="/static/app.js?v=reset"></script>
 </body>
 
 </html>

@@ -195,16 +195,22 @@ async def transcript_websocket(websocket: WebSocket):
                 message = json.loads(data)
                 if message.get("type") == "config":
                     # Handle configuration changes
+                    if "source_lang" in message:
+                        new_source_lang = message["source_lang"]
+                        logger.info(f"Switching source language to: {new_source_lang}")
+                        await transcription_service.stop()
+                        translation_service.clear_context() # Clear context on source change
+                        await transcription_service.start(source_lang=new_source_lang)
+
                     if "target_lang" in message:
                         new_lang = message["target_lang"]
                         logger.info(f"Client requested target language change to: {new_lang}")
                         translation_service.default_target_lang = new_lang
+                        translation_service.clear_context() # Clear context on target change
                     
                     if "target_voice" in message:
                         new_voice = message["target_voice"]
                         logger.info(f"Client requested target voice change to: {new_voice}")
-                        # Store voice in translation service (or pass it dynamically)
-                        # For simplicity, we'll add a default_voice attribute to TranslationService
                         translation_service.default_target_voice = new_voice
                         
             except json.JSONDecodeError:
