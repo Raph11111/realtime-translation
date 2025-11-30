@@ -28,6 +28,7 @@ class TranscriptionService:
 
     async def start(self, source_lang="fr"):
         """Starts the Deepgram Live Transcription connection."""
+        self.last_source_lang = source_lang # Save for reconnection
         if self.is_connected:
             return
 
@@ -49,10 +50,15 @@ class TranscriptionService:
 
             async def on_error(self_handler, error, **kwargs):
                 logger.error(f"Deepgram Error: {error}")
+                # Attempt reconnect on error
+                self.is_connected = False
+                # We don't await here to avoid blocking the error handler, 
+                # but in a real app we might want a background task for reconnection.
 
             # Register handlers
             self.dg_connection.on(LiveTranscriptionEvents.Transcript, on_message)
             self.dg_connection.on(LiveTranscriptionEvents.Error, on_error)
+            # self.dg_connection.on(LiveTranscriptionEvents.Close, on_close) # Deepgram SDK might not expose Close event easily in this version
 
             # Configure options
             logger.info(f"Connecting to Deepgram with language={source_lang}")
@@ -64,7 +70,7 @@ class TranscriptionService:
                 channels=1,
                 sample_rate=16000,
                 interim_results=True,
-                utterance_end_ms=1000, # Revert to 1000 to fix HTTP 400
+                utterance_end_ms=1000, 
                 vad_events=True,
             )
 
@@ -78,7 +84,8 @@ class TranscriptionService:
 
         except Exception as e:
             logger.error(f"Failed to initialize Deepgram: {e}")
-            raise
+            self.is_connected = False
+            # Don't raise, just log, so the app doesn't crash loop
 
     async def stop(self):
         """Stops the Deepgram connection."""
@@ -89,6 +96,18 @@ class TranscriptionService:
         logger.info("Disconnected from Deepgram")
 
     async def send_audio(self, audio_data: bytes):
-        """Sends audio data to Deepgram."""
+        """Sends audio data to Deepgram. Auto-reconnects if needed."""
+        if not self.is_connected:
+            # Try to reconnect if we have a saved language
+            if hasattr(self, 'last_source_lang') and self.last_source_lang:
+                logger.warning("Connection lost. Attempting to reconnect...")
+                await self.start(self.last_source_lang)
+                if not self.is_connected:
+                    return # Failed to reconnect
+
         if self.is_connected and self.dg_connection:
-            await self.dg_connection.send(audio_data)
+            try:
+                await self.dg_connection.send(audio_data)
+            except Exception as e:
+                logger.error(f"Error sending audio: {e}")
+                self.is_connected = False # Mark as disconnected so next chunk triggers reconnect

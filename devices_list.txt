@@ -1,0 +1,74 @@
+
+=== Available Audio Devices ===
+
+Index 0: Microsoft Soundmapper - Input
+   - Channels: 2
+   - Sample Rate: 44100.0
+------------------------------
+Index 1: CABLE Output (VB-Audio Virtual 
+   - Channels: 8
+   - Sample Rate: 44100.0
+------------------------------
+Index 2: Mikrofonarray (2- Realtek(R) Au
+   - Channels: 4
+   - Sample Rate: 44100.0
+------------------------------
+Index 8: Primärer Soundaufnahmetreiber
+   - Channels: 2
+   - Sample Rate: 44100.0
+------------------------------
+Index 9: CABLE Output (VB-Audio Virtual Cable)
+   - Channels: 8
+   - Sample Rate: 44100.0
+------------------------------
+Index 10: Mikrofonarray (2- Realtek(R) Audio)
+   - Channels: 4
+   - Sample Rate: 44100.0
+------------------------------
+Index 20: CABLE Output (VB-Audio Virtual Cable)
+   - Channels: 2
+   - Sample Rate: 44100.0
+------------------------------
+Index 21: Mikrofonarray (2- Realtek(R) Audio)
+   - Channels: 2
+   - Sample Rate: 48000.0
+------------------------------
+Index 24: PC-Lautsprecher (Realtek HD Audio 2nd output with SST)
+   - Channels: 2
+   - Sample Rate: 48000.0
+------------------------------
+Index 25: Mikrofonarray 1 (Realtek HD Audio Mic input with SST)
+   - Channels: 2
+   - Sample Rate: 48000.0
+------------------------------
+Index 26: Mikrofonarray 2 (Realtek HD Audio Mic input with SST)
+   - Channels: 4
+   - Sample Rate: 16000.0
+------------------------------
+Index 27: Mikrofonarray 3 (Realtek HD Audio Mic input with SST)
+   - Channels: 4
+   - Sample Rate: 16000.0
+------------------------------
+Index 28: Stereomix (Realtek HD Audio Stereo input)
+   - Channels: 2
+   - Sample Rate: 48000.0
+------------------------------
+Index 31: PC-Lautsprecher (Realtek HD Audio output with SST)
+   - Channels: 2
+   - Sample Rate: 48000.0
+------------------------------
+Index 32: FrontMic (Realtek HD Audio Front Mic input)
+   - Channels: 2
+   - Sample Rate: 44100.0
+------------------------------
+Index 35: Mikrofon (Realtek USB Audio)
+   - Channels: 2
+   - Sample Rate: 48000.0
+------------------------------
+Index 38: CABLE Output (VB-Audio Point)
+   - Channels: 8
+   - Sample Rate: 44100.0
+------------------------------
+
+===============================
+To use a device, set INPUT_DEVICE_INDEX=<Index> in your .env file.
