@@ -67,8 +67,8 @@ class TranscriptionService:
                 language=source_lang, 
                 smart_format=True,
                 encoding="linear16",
-                channels=1,
-                sample_rate=16000,
+                channels=2,
+                sample_rate=44100,
                 interim_results=True,
                 utterance_end_ms=1000, 
                 vad_events=True,
@@ -111,3 +111,16 @@ class TranscriptionService:
             except Exception as e:
                 logger.error(f"Error sending audio: {e}")
                 self.is_connected = False # Mark as disconnected so next chunk triggers reconnect
+
+    async def send_keep_alive(self):
+        """Sends a KeepAlive message to Deepgram (Silent Audio)."""
+        if self.is_connected and self.dg_connection:
+            try:
+                # logger.debug("Sending KeepAlive (Silence) to Deepgram")
+                # Send 1 second of silence (16-bit mono 44.1kHz = 88200 bytes, stereo = 176400 bytes)
+                # We are using linear16, 2 channels, 44100Hz
+                silence = b'\x00' * 4096 # Send a small chunk of silence
+                await self.dg_connection.send(silence)
+            except Exception as e:
+                logger.error(f"Error sending KeepAlive: {e}")
+                self.is_connected = False

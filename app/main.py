@@ -123,14 +123,37 @@ async def lifespan(app: FastAPI):
 async def feed_audio_to_transcription():
     """Background task to pipe audio from capture to transcription."""
     logger.info("Starting audio feed to transcription engine")
+    import time
+    last_keep_alive = time.time()
+    chunk_count = 0
+    
     while True:
         try:
-            chunk = await audio_service.get_audio_chunk()
-            if chunk:
-                await transcription_service.send_audio(chunk)
+            try:
+                # Wait for audio with a timeout
+                chunk = await asyncio.wait_for(audio_service.get_audio_chunk(), timeout=3.0)
+                if chunk:
+                    await transcription_service.send_audio(chunk)
+                    
+                    chunk_count += 1
+                    if chunk_count % 100 == 0:
+                        logger.info(f"Sent {chunk_count} chunks to Deepgram. Last size: {len(chunk)}")
+
+            except asyncio.TimeoutError:
+                logger.warning("No audio received for 3 seconds. Sending KeepAlive...")
+                await transcription_service.send_keep_alive()
+                last_keep_alive = time.time()
+                
+                # Check audio service status
+                if audio_service.is_running:
+                    logger.warning("Audio service is running but no data received.")
+                else:
+                    logger.warning("Audio service is NOT running. Attempting to start...")
+                    await audio_service.start_stream()
+                    
         except Exception as e:
             logger.error(f"Error feeding audio to transcription: {e}")
-            await asyncio.sleep(0.01) # Short sleep to prevent tight loop on error
+            await asyncio.sleep(1.0)
 
 from fastapi.staticfiles import StaticFiles
 
@@ -153,6 +176,29 @@ from fastapi.responses import FileResponse
 @app.get("/")
 async def root():
     return FileResponse("app/static/index.html")
+
+@app.get("/api/devices")
+async def get_audio_devices():
+    """Returns a list of available audio input devices."""
+    return audio_service.list_input_devices()
+
+from pydantic import BaseModel
+
+class DeviceSelection(BaseModel):
+    device_index: int
+
+@app.post("/api/devices")
+async def select_audio_device(selection: DeviceSelection):
+    """Switches the active audio input device."""
+    try:
+        await audio_service.set_device(selection.device_index)
+        return {"status": "success", "message": f"Switched to device index {selection.device_index}"}
+    except ValueError as e:
+        return {"status": "error", "message": str(e)}
+    except Exception as e:
+        logger.error(f"Error switching device: {e}")
+        return {"status": "error", "message": "Internal server error"}
+
 
 @app.websocket("/ws/audio")
 async def audio_websocket(websocket: WebSocket):

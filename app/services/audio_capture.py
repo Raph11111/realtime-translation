@@ -16,8 +16,8 @@ class AudioCaptureService:
             self.device_index = int(self.device_index)
         else:
             self.device_index = None # Let sounddevice choose default
-        self.samplerate = 16000
-        self.channels = 1
+        self.samplerate = 44100
+        self.channels = 2
         self.blocksize = 1024  # Adjust for latency vs stability
         self.stream = None
         self.is_running = False
@@ -29,29 +29,46 @@ class AudioCaptureService:
             logger.warning(f"Audio status: {status}")
         
         # Convert to bytes and put in queue
-        # indata is a numpy array of float32 by default
-        # We might need int16 for some APIs, but float32 is standard for processing
-        # Deepgram usually accepts linear16 (int16)
+        # indata is already int16 because we set dtype="int16" in start_stream
         
         # Calculate RMS (volume) for debugging
-        rms = np.sqrt(np.mean(indata**2))
-        if rms > 0.01: # Only log if there's some sound
-            # logger.info(f"Audio Level (RMS): {rms:.4f}")
+        # We need to convert to float for RMS calculation to avoid overflow
+        rms = np.sqrt(np.mean(indata.astype(float)**2))
+        if rms > 100: # Threshold for int16 (max 32767)
+            logger.info(f"Audio Level (RMS): {rms:.2f}")
             pass
         
-        # Convert float32 [-1, 1] to int16 [-32768, 32767]
-        audio_data = (indata * 32767).astype(np.int16)
+        audio_data = indata
         
         # We need to use call_soon_threadsafe because this callback runs in a separate thread
-        try:
-            self.queue.put_nowait(audio_data.tobytes())
-        except asyncio.QueueFull:
-            logger.error("Audio queue full, dropping frame")
+        if self.loop:
+            self.loop.call_soon_threadsafe(self.queue.put_nowait, audio_data.tobytes())
+            
+        # Debug heartbeat
+        if not hasattr(self, '_frame_count'):
+            self._frame_count = 0
+        if not hasattr(self, '_silence_count'):
+            self._silence_count = 0
+            
+        self._frame_count += 1
+        
+        if rms < 5:
+            self._silence_count += 1
+        else:
+            self._silence_count = 0
+            
+        if self._silence_count > 200 and self._silence_count % 200 == 0:
+             logger.warning(f"WARNING: MICROPHONE IS SILENT (RMS: {rms:.2f}). Check your input device settings!")
+
+        if self._frame_count % 200 == 0: # Approx every 4-5 seconds at 44.1kHz/1024
+            logger.info(f"Audio stream active. Current RMS: {rms:.2f}")
 
     async def start_stream(self):
         """Starts the audio stream."""
         if self.is_running:
             return
+
+        self.loop = asyncio.get_running_loop()
 
         devices_to_try = []
         if self.device_index is not None:
@@ -78,11 +95,12 @@ class AudioCaptureService:
                     samplerate=self.samplerate,
                     blocksize=self.blocksize,
                     callback=self._callback,
-                    dtype="float32"
+                    dtype="int16"
                 )
                 self.stream.start()
                 self.is_running = True
-                logger.info(f"Audio stream started successfully on device {dev_idx}")
+                device_name = sd.query_devices(dev_idx)['name']
+                logger.info(f"Audio stream started successfully on device {dev_idx}: {device_name}")
                 return # Success!
             except Exception as e:
                 logger.warning(f"Failed to start on device {dev_idx}: {e}")
@@ -103,3 +121,55 @@ class AudioCaptureService:
     async def get_audio_chunk(self):
         """Retrieves the next audio chunk from the queue."""
         return await self.queue.get()
+
+    def list_input_devices(self):
+        """Lists all available audio input devices."""
+        devices = []
+        try:
+            logger.info("Querying audio devices...")
+            # host_api_info = sd.query_host_apis() # potentially problematic
+            
+            all_devices = sd.query_devices()
+            logger.info(f"Found {len(all_devices)} total devices.")
+            
+            default_input = -1
+            try:
+                default_input = sd.default.device[0]
+            except Exception as e:
+                logger.warning(f"Could not determine default device: {e}")
+
+            for i, d in enumerate(all_devices):
+                if d['max_input_channels'] > 0:
+                    devices.append({
+                        "index": i,
+                        "name": d['name'],
+                        "host_api": d['hostapi'],
+                        "is_default": (i == default_input)
+                    })
+            logger.info(f"Returning {len(devices)} input devices.")
+        except Exception as e:
+            logger.error(f"Error listing devices: {e}", exc_info=True)
+        return devices
+
+    async def set_device(self, device_index: int):
+        """Switches the audio input device."""
+        logger.info(f"Switching input device to index: {device_index}")
+        
+        # Validate index
+        try:
+            dev = sd.query_devices(device_index)
+            if dev['max_input_channels'] <= 0:
+                raise ValueError("Selected device has no input channels")
+        except Exception as e:
+            logger.error(f"Invalid device index {device_index}: {e}")
+            raise ValueError(f"Invalid device index: {e}")
+
+        self.device_index = device_index
+        
+        # Restart stream if running
+        if self.is_running:
+            self.stop_stream()
+            # Small pause to ensure cleanup
+            await asyncio.sleep(0.5) 
+            await self.start_stream()
+

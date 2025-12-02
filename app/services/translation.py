@@ -59,7 +59,9 @@ Rules:
         Called when a new transcript is received.
         We only translate 'final' transcripts to save API calls and reduce jitter.
         """
+        # logger.info(f"Received transcript: '{text[:30]}...' (Final: {is_final})")
         if is_final:
+            logger.info(f"Processing FINAL transcript: '{text}'")
             # Use defaults if not provided
             lang = target_lang or self.default_target_lang
             voice = target_voice or self.default_target_voice

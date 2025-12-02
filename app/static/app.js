@@ -31,6 +31,7 @@ const translatedText = document.getElementById('translatedText');
 const sourceLangSelect = document.getElementById('sourceLang');
 const targetLangSelect = document.getElementById('targetLang');
 const targetVoiceSelect = document.getElementById('targetVoice');
+const audioInputSelect = document.getElementById('audioInput');
 const canvas = document.getElementById('audioVisualizer');
 
 // Check for missing elements
@@ -256,11 +257,68 @@ function updateConfig() {
     }
 }
 
+// Audio Device Management
+async function fetchAudioDevices() {
+    try {
+        const response = await fetch('/api/devices');
+        const devices = await response.json();
+
+        audioInputSelect.innerHTML = ''; // Clear loading option
+
+        if (devices.length === 0) {
+            const option = document.createElement('option');
+            option.text = "No devices found";
+            audioInputSelect.add(option);
+            return;
+        }
+
+        devices.forEach(device => {
+            const option = document.createElement('option');
+            option.value = device.index;
+            option.text = device.name;
+            if (device.is_default) {
+                option.selected = true;
+            }
+            audioInputSelect.add(option);
+        });
+    } catch (error) {
+        console.error("Error fetching audio devices:", error);
+        audioInputSelect.innerHTML = '<option>Error loading devices</option>';
+    }
+}
+
+async function changeAudioDevice() {
+    const deviceIndex = parseInt(audioInputSelect.value);
+    console.log("Switching to device index:", deviceIndex);
+
+    try {
+        const response = await fetch('/api/devices', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ device_index: deviceIndex })
+        });
+
+        const result = await response.json();
+        if (result.status === 'success') {
+            console.log("Device switched successfully");
+        } else {
+            console.error("Failed to switch device:", result.message);
+            alert("Failed to switch device: " + result.message);
+        }
+    } catch (error) {
+        console.error("Error switching device:", error);
+    }
+}
+
 // Event Listeners
 recordButton.addEventListener('click', toggleRecording);
 sourceLangSelect.addEventListener('change', updateConfig);
 targetLangSelect.addEventListener('change', updateConfig);
 targetVoiceSelect.addEventListener('change', updateConfig);
+audioInputSelect.addEventListener('change', changeAudioDevice);
 
 // Init
+fetchAudioDevices();
 connectWebSocket();

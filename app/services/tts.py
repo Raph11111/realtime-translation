@@ -55,12 +55,32 @@ class TTSService:
         # Map user voice to OpenAI voice ID
         openai_voice = self.voice_mapping.get(voice, self.default_voice)
 
-        # Try ElevenLabs - DISABLED per user request
-        # if self.elevenlabs_client:
-        #     try:
-        #         ...
-        #     except Exception as e:
-        #         logger.error(f"ElevenLabs TTS error: {e}. Falling back to OpenAI.")
+        # Try ElevenLabs
+        if self.elevenlabs_client:
+            try:
+                logger.info(f"Generating TTS with ElevenLabs for text: '{text[:20]}...'")
+                # Use Turbo v2.5 for low latency
+                audio_stream = self.elevenlabs_client.generate(
+                    text=text,
+                    voice=self.voice_id,
+                    model="eleven_turbo_v2_5",
+                    stream=True
+                )
+                
+                # Stream chunks
+                chunk_count = 0
+                total_bytes = 0
+                for chunk in audio_stream:
+                    if chunk:
+                        chunk_count += 1
+                        total_bytes += len(chunk)
+                        for callback in self.callbacks:
+                            await callback(chunk)
+                logger.info(f"ElevenLabs TTS complete. Sent {chunk_count} chunks, {total_bytes} bytes.")
+                return # Success, skip fallback
+                
+            except Exception as e:
+                logger.error(f"ElevenLabs TTS error: {e}. Falling back to OpenAI.")
 
         # Fallback to OpenAI
         if self.openai_client:
