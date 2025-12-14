@@ -1,0 +1,81 @@
+services:
+  # Main Translation Application
+  translation-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: translation-app
+    ports:
+      - "8000:8000"
+    environment:
+      # API Keys (set in .env file or override here)
+      - DEEPGRAM_API_KEY=${DEEPGRAM_API_KEY}
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY}
+
+      # Application Settings
+      - DEFAULT_SOURCE_LANG=${DEFAULT_SOURCE_LANG:-fr}
+      - TARGET_LANGUAGE=${TARGET_LANGUAGE:-de}
+      - BASE_URL=${BASE_URL:-http://localhost:8000}
+      - AUTO_START_PIPELINE=false
+
+      # Audio Settings (for container, usually use virtual devices)
+      - AUDIO_INPUT_DEVICE_INDEX=${AUDIO_INPUT_DEVICE_INDEX:-0}
+
+    # For audio passthrough on Linux (optional)
+    # devices:
+    #   - /dev/snd:/dev/snd
+
+    volumes:
+      # Persist any generated files
+      - ./data:/app/data
+
+    restart: unless-stopped
+
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8000/healthz" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+    networks:
+      - translation-network
+  # Optional: Redis for session/room state (for scaling)
+  # redis:
+  #   image: redis:7-alpine
+  #   container_name: translation-redis
+  #   ports:
+  #     - "6379:6379"
+  #   volumes:
+  #     - redis_data:/data
+  #   networks:
+  #     - translation-network
+  #   healthcheck:
+  #     test: ["CMD", "redis-cli", "ping"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+
+  # Optional: Nginx for SSL termination and load balancing
+  # nginx:
+  #   image: nginx:alpine
+  #   container_name: translation-nginx
+  #   ports:
+  #     - "80:80"
+  #     - "443:443"
+  #   volumes:
+  #     - ./nginx.conf:/etc/nginx/nginx.conf:ro
+  #     - ./ssl:/etc/nginx/ssl:ro
+  #   depends_on:
+  #     - translation-app
+  #   networks:
+  #     - translation-network
+
+networks:
+  translation-network:
+    driver: bridge
+
+volumes:
+  redis_data:

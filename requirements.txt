@@ -1,12 +1,43 @@
+# Core Framework
 fastapi>=0.109.0
 uvicorn[standard]>=0.27.0
 python-dotenv>=1.0.1
 websockets>=12.0
+pydantic>=2.0.0
+
+# Audio Processing
 sounddevice
-deepgram-sdk<4.0.0
-httpx>=0.26.0
 numpy
-openai>=1.10.0
+
+# Speech-to-Text
+deepgram-sdk<4.0.0
+
+# Translation (Groq)
 groq>=0.4.0
+
+# Text-to-Speech
+openai>=1.55.0
 elevenlabs>=0.2.27
+
+# HTTP Client
+httpx>=0.26.0
+
+# Utilities
 colorama>=0.4.6
+
+# QR Code Generation
+qrcode[pil]>=7.4.0
+pillow>=10.0.0
+
+# Optional: Local AI Models (for offline mode)
+# whisper  # OpenAI Whisper for local STT
+# transformers  # For NLLB translation
+# TTS  # Coqui TTS for local TTS
+
+# Optional: Redis for scaling
+# redis>=5.0.0
+
+# Testing
+pytest>=7.0.0
+pytest-asyncio>=0.21.0
+httpx>=0.26.0

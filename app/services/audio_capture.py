@@ -21,7 +21,8 @@ class AudioCaptureService:
         self.blocksize = 1024  # Adjust for latency vs stability
         self.stream = None
         self.is_running = False
-        self.queue = asyncio.Queue()
+        # Bounded queue to avoid unbounded memory growth if downstream stalls
+        self.queue = asyncio.Queue(maxsize=300)
 
     def _callback(self, indata, frames, time, status):
         """Callback for sounddevice to capture audio chunks."""
@@ -40,9 +41,23 @@ class AudioCaptureService:
         
         audio_data = indata
         
-        # We need to use call_soon_threadsafe because this callback runs in a separate thread
         if self.loop:
-            self.loop.call_soon_threadsafe(self.queue.put_nowait, audio_data.tobytes())
+            # Schedule queue operation on the main event loop
+            self.loop.call_soon_threadsafe(self._enqueue_audio, audio_data.tobytes(), rms)
+
+    def _enqueue_audio(self, data: bytes, rms: float):
+        """Helper to safely put audio into queue from the event loop."""
+        try:
+            if self.queue.full():
+                 # Drop the oldest item to make room
+                try:
+                    self.queue.get_nowait()
+                except asyncio.QueueEmpty:
+                    pass
+            self.queue.put_nowait(data)
+        except asyncio.QueueFull:
+            # Should hopefully not happen if we just made room, but possible in race conditions
+            pass
             
         # Debug heartbeat
         if not hasattr(self, '_frame_count'):

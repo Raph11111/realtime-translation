@@ -39,6 +39,9 @@ class TranscriptionService:
             # Define event handlers
             async def on_message(self_handler, result, **kwargs):
                 sentence = result.channel.alternatives[0].transcript
+                if len(sentence) > 0:
+                    logger.info(f"Deepgram Transcript: {sentence}")
+                
                 if len(sentence) == 0:
                     return
                 
@@ -55,9 +58,13 @@ class TranscriptionService:
                 # We don't await here to avoid blocking the error handler, 
                 # but in a real app we might want a background task for reconnection.
 
+            async def on_open(self_handler, open, **kwargs):
+                logger.info("Deepgram Connection OPEN")
+
             # Register handlers
             self.dg_connection.on(LiveTranscriptionEvents.Transcript, on_message)
             self.dg_connection.on(LiveTranscriptionEvents.Error, on_error)
+            self.dg_connection.on(LiveTranscriptionEvents.Open, on_open)
             # self.dg_connection.on(LiveTranscriptionEvents.Close, on_close) # Deepgram SDK might not expose Close event easily in this version
 
             # Configure options

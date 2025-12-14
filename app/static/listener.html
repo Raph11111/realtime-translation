@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Join Translation Room</title>
+
+    <!-- PWA Meta Tags -->
+    <meta name="theme-color" content="#0a0a0f">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="manifest" href="/static/manifest.json">
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-glass: rgba(20, 20, 30, 0.7);
+            --text-primary: #ffffff;
+            --text-secondary: #a0a0b0;
+            --accent-primary: #7000ff;
+            --accent-secondary: #00ddff;
+            --success: #22c55e;
+            --error: #ef4444;
+            --border-color: rgba(255, 255, 255, 0.1);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 420px;
+        }
+
+        .glass-card {
+            background: var(--bg-glass);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid var(--border-color);
+            border-radius: 24px;
+            padding: 32px;
+            margin-bottom: 20px;
+        }
+
+        .logo {
+            text-align: center;
+            margin-bottom: 24px;
+        }
+
+        .logo h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .room-info {
+            text-align: center;
+            margin-bottom: 32px;
+        }
+
+        .room-name {
+            font-size: 1.75rem;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+
+        .room-id {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            font-family: monospace;
+        }
+
+        .source-lang {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(112, 0, 255, 0.2);
+            padding: 6px 12px;
+            border-radius: 20px;
+            margin-top: 12px;
+            font-size: 0.875rem;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+        }
+
+        .select-wrapper {
+            position: relative;
+        }
+
+        .select-wrapper::after {
+            content: '▼';
+            position: absolute;
+            right: 16px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 10px;
+            color: var(--text-secondary);
+            pointer-events: none;
+        }
+
+        select {
+            width: 100%;
+            padding: 14px 16px;
+            font-size: 1rem;
+            font-family: inherit;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            color: var(--text-primary);
+            appearance: none;
+            cursor: pointer;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        select:focus {
+            outline: none;
+            border-color: var(--accent-primary);
+            box-shadow: 0 0 0 3px rgba(112, 0, 255, 0.2);
+        }
+
+        .join-button {
+            width: 100%;
+            padding: 16px;
+            font-size: 1.125rem;
+            font-weight: 600;
+            font-family: inherit;
+            background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+            border: none;
+            border-radius: 14px;
+            color: white;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .join-button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(112, 0, 255, 0.4);
+        }
+
+        .join-button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        /* Listening State */
+        .listening-view {
+            display: none;
+            text-align: center;
+        }
+
+        .listening-view.active {
+            display: block;
+        }
+
+        .join-form.hidden {
+            display: none;
+        }
+
+        .audio-wave {
+            margin: 32px auto;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            height: 60px;
+        }
+
+        .audio-wave span {
+            display: block;
+            width: 6px;
+            background: linear-gradient(180deg, var(--accent-primary), var(--accent-secondary));
+            border-radius: 3px;
+            animation: wave 1.2s infinite ease-in-out;
+        }
+
+        .audio-wave span:nth-child(1) {
+            animation-delay: 0s;
+            height: 20px;
+        }
+
+        .audio-wave span:nth-child(2) {
+            animation-delay: 0.1s;
+            height: 35px;
+        }
+
+        .audio-wave span:nth-child(3) {
+            animation-delay: 0.2s;
+            height: 50px;
+        }
+
+        .audio-wave span:nth-child(4) {
+            animation-delay: 0.3s;
+            height: 35px;
+        }
+
+        .audio-wave span:nth-child(5) {
+            animation-delay: 0.4s;
+            height: 20px;
+        }
+
+        @keyframes wave {
+
+            0%,
+            100% {
+                transform: scaleY(0.5);
+            }
+
+            50% {
+                transform: scaleY(1);
+            }
+        }
+
+        .status-text {
+            color: var(--success);
+            font-weight: 500;
+            margin-bottom: 16px;
+        }
+
+        .current-language {
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+
+        .language-code {
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+            margin-bottom: 24px;
+        }
+
+        .transcript-box {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 20px;
+            max-height: 200px;
+            overflow-y: auto;
+            text-align: left;
+            margin-bottom: 24px;
+        }
+
+        .transcript-box p {
+            line-height: 1.6;
+        }
+
+        .transcript-box .placeholder {
+            color: var(--text-secondary);
+            font-style: italic;
+        }
+
+        .leave-button {
+            background: transparent;
+            border: 1px solid var(--error);
+            color: var(--error);
+            padding: 12px 24px;
+            border-radius: 10px;
+            font-family: inherit;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .leave-button:hover {
+            background: rgba(239, 68, 68, 0.1);
+        }
+
+        /* Connection indicator */
+        .connection-status {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            margin-bottom: 20px;
+            font-size: 0.875rem;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--text-secondary);
+        }
+
+        .status-dot.connected {
+            background: var(--success);
+            box-shadow: 0 0 10px var(--success);
+        }
+
+        /* Error state */
+        .error-message {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid var(--error);
+            border-radius: 12px;
+            padding: 16px;
+            color: var(--error);
+            text-align: center;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        /* Listener count */
+        .listener-count {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+        }
+
+        .listener-count svg {
+            width: 16px;
+            height: 16px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="glass-card">
+            <div class="logo">
+                <h1>🌐 Live Translation</h1>
+            </div>
+
+            <div id="errorMessage" class="error-message"></div>
+
+            <!-- Join Form -->
+            <div id="joinForm" class="join-form">
+                <div class="room-info">
+                    <h2 class="room-name" id="roomName">Loading...</h2>
+                    <span class="room-id" id="roomId"></span>
+                    <div class="source-lang" id="sourceLang">
+                        <span>🎤</span>
+                        <span id="sourceLanguage">-</span>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="targetLanguage">Choose your language</label>
+                    <div class="select-wrapper">
+                        <select id="targetLanguage">
+                            <option value="en">🇬🇧 English</option>
+                            <option value="de">🇩🇪 German</option>
+                            <option value="es">🇪🇸 Spanish</option>
+                            <option value="fr">🇫🇷 French</option>
+                            <option value="it">🇮🇹 Italian</option>
+                            <option value="pt">🇵🇹 Portuguese</option>
+                            <option value="nl">🇳🇱 Dutch</option>
+                            <option value="pl">🇵🇱 Polish</option>
+                            <option value="ru">🇷🇺 Russian</option>
+                            <option value="uk">🇺🇦 Ukrainian</option>
+                            <option value="ar">🇸🇦 Arabic</option>
+                            <option value="zh">🇨🇳 Chinese</option>
+                            <option value="ja">🇯🇵 Japanese</option>
+                            <option value="ko">🇰🇷 Korean</option>
+                            <option value="hi">🇮🇳 Hindi</option>
+                            <option value="tr">🇹🇷 Turkish</option>
+                            <option value="vi">🇻🇳 Vietnamese</option>
+                            <option value="th">🇹🇭 Thai</option>
+                            <option value="id">🇮🇩 Indonesian</option>
+                            <option value="sw">🇰🇪 Swahili</option>
+                        </select>
+                    </div>
+                </div>
+
+                <button class="join-button" id="joinButton">
+                    Join & Listen
+                </button>
+            </div>
+
+            <!-- Listening View -->
+            <div id="listeningView" class="listening-view">
+                <div class="connection-status">
+                    <span class="status-dot" id="statusDot"></span>
+                    <span id="connectionText">Connecting...</span>
+                </div>
+
+                <div class="current-language" id="currentLanguage">🇬🇧 English</div>
+                <div class="language-code" id="languageCode">en</div>
+
+                <div class="audio-wave">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </div>
+
+                <div class="transcript-box">
+                    <p id="translatedText" class="placeholder">Waiting for translation...</p>
+                </div>
+
+                <button class="leave-button" id="leaveButton">Leave Room</button>
+            </div>
+        </div>
+
+        <div class="listener-count" id="listenerCount">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+            <span id="listenerNumber">-</span> listeners
+        </div>
+    </div>
+
+    <script>
+        // Get room ID from URL
+        const pathParts = window.location.pathname.split('/');
+        const roomId = pathParts[pathParts.length - 1];
+
+        // DOM Elements
+        const roomNameEl = document.getElementById('roomName');
+        const roomIdEl = document.getElementById('roomId');
+        const sourceLanguageEl = document.getElementById('sourceLanguage');
+        const targetLanguageSelect = document.getElementById('targetLanguage');
+        const joinButton = document.getElementById('joinButton');
+        const joinForm = document.getElementById('joinForm');
+        const listeningView = document.getElementById('listeningView');
+        const leaveButton = document.getElementById('leaveButton');
+        const statusDot = document.getElementById('statusDot');
+        const connectionText = document.getElementById('connectionText');
+        const currentLanguageEl = document.getElementById('currentLanguage');
+        const languageCodeEl = document.getElementById('languageCode');
+        const translatedTextEl = document.getElementById('translatedText');
+        const errorMessageEl = document.getElementById('errorMessage');
+        const listenerNumberEl = document.getElementById('listenerNumber');
+
+        // State
+        let ws = null;
+        let audioContext = null;
+        let nextStartTime = 0;
+
+        // Language display names
+        const languageNames = {
+            'en': '🇬🇧 English',
+            'de': '🇩🇪 German',
+            'es': '🇪🇸 Spanish',
+            'fr': '🇫🇷 French',
+            'it': '🇮🇹 Italian',
+            'pt': '🇵🇹 Portuguese',
+            'nl': '🇳🇱 Dutch',
+            'pl': '🇵🇱 Polish',
+            'ru': '🇷🇺 Russian',
+            'uk': '🇺🇦 Ukrainian',
+            'ar': '🇸🇦 Arabic',
+            'zh': '🇨🇳 Chinese',
+            'ja': '🇯🇵 Japanese',
+            'ko': '🇰🇷 Korean',
+            'hi': '🇮🇳 Hindi',
+            'tr': '🇹🇷 Turkish',
+            'vi': '🇻🇳 Vietnamese',
+            'th': '🇹🇭 Thai',
+            'id': '🇮🇩 Indonesian',
+            'sw': '🇰🇪 Swahili',
+            'auto': '🔄 Auto-Detect'
+        };
+
+        // Fetch room info
+        async function loadRoomInfo() {
+            try {
+                const response = await fetch(`/api/rooms/${roomId}`);
+                if (!response.ok) {
+                    throw new Error('Room not found');
+                }
+
+                const room = await response.json();
+                roomNameEl.textContent = room.room_name;
+                roomIdEl.textContent = `Room ID: ${room.room_id}`;
+                sourceLanguageEl.textContent = languageNames[room.source_language] || room.source_language;
+                listenerNumberEl.textContent = room.total_listeners;
+
+            } catch (error) {
+                showError('This room does not exist or has been closed.');
+                joinButton.disabled = true;
+            }
+        }
+
+        function showError(message) {
+            errorMessageEl.textContent = message;
+            errorMessageEl.style.display = 'block';
+        }
+
+        function hideError() {
+            errorMessageEl.style.display = 'none';
+        }
+
+        // Audio playback
+        async function playAudio(arrayBuffer) {
+            if (!audioContext) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            }
+
+            if (audioContext.state === 'suspended') {
+                await audioContext.resume();
+            }
+
+            try {
+                const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+                const source = audioContext.createBufferSource();
+                source.buffer = audioBuffer;
+                source.connect(audioContext.destination);
+
+                const currentTime = audioContext.currentTime;
+                if (nextStartTime < currentTime) {
+                    nextStartTime = currentTime;
+                }
+
+                source.start(nextStartTime);
+                nextStartTime += audioBuffer.duration;
+
+            } catch (e) {
+                console.error('Error decoding audio:', e);
+            }
+        }
+
+        // Connect to WebSocket
+        function connect(language) {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/api/rooms/${roomId}/listen/${language}`;
+
+            ws = new WebSocket(wsUrl);
+            ws.binaryType = 'arraybuffer';
+
+            ws.onopen = () => {
+                statusDot.classList.add('connected');
+                connectionText.textContent = 'Connected';
+                hideError();
+            };
+
+            ws.onclose = () => {
+                statusDot.classList.remove('connected');
+                connectionText.textContent = 'Disconnected';
+            };
+
+            ws.onerror = () => {
+                showError('Connection error. Please try again.');
+            };
+
+            ws.onmessage = async (event) => {
+                if (event.data instanceof ArrayBuffer) {
+                    // Audio data
+                    await playAudio(event.data);
+                } else {
+                    // Text message
+                    try {
+                        const data = JSON.parse(event.data);
+
+                        if (data.type === 'welcome') {
+                            console.log('Joined room:', data.room_name);
+                        } else if (data.type === 'translation') {
+                            if (translatedTextEl.classList.contains('placeholder')) {
+                                translatedTextEl.textContent = '';
+                                translatedTextEl.classList.remove('placeholder');
+                            }
+                            translatedTextEl.textContent += data.text + ' ';
+                        } else if (data.type === 'transcript') {
+                            // Could show original in a separate area
+                        }
+                    } catch (e) {
+                        console.error('Error parsing message:', e);
+                    }
+                }
+            };
+        }
+
+        function disconnect() {
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+        }
+
+        // Event Listeners
+        joinButton.addEventListener('click', async () => {
+            const language = targetLanguageSelect.value;
+
+            // Initialize AudioContext (needs user interaction)
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+
+            // Switch views
+            joinForm.classList.add('hidden');
+            listeningView.classList.add('active');
+
+            // Update display
+            currentLanguageEl.textContent = languageNames[language] || language;
+            languageCodeEl.textContent = language.toUpperCase();
+
+            // Connect
+            connect(language);
+        });
+
+        leaveButton.addEventListener('click', () => {
+            disconnect();
+
+            // Switch views
+            listeningView.classList.remove('active');
+            joinForm.classList.remove('hidden');
+
+            // Reset transcript
+            translatedTextEl.textContent = 'Waiting for translation...';
+            translatedTextEl.classList.add('placeholder');
+        });
+
+        // Initialize
+        loadRoomInfo();
+    </script>
+</body>
+
+</html>

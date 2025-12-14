@@ -24,16 +24,19 @@ class TranslationService:
         # We keep the last 3 turns to provide context without blowing up the prompt.
         self.context_buffer = deque(maxlen=3)
         
+        self.transcript_buffer = ""
+        
         # Base system prompt
-        self.base_system_prompt = """You are a professional simultaneous interpreter for a church service. 
+        self.base_system_prompt = """You are a highly accurate simultaneous interpreter. 
 Translate the following text into {target_lang} immediately.
 
 Rules:
-1. Be concise but accurate.
-2. Maintain the theological tone (solemn, respectful).
-3. Do not explain, just translate.
-4. Handle religious terms correctly (e.g., 'Salut' -> 'Heil'/'Salvation', not 'Hi').
-5. Use the provided context to resolve ambiguities (pronouns, references).
+1. Output ONLY the translation. NO headers, NO notes, NO explanations.
+2. If the input text is incomplete or nonsensical, output NOTHING.
+3. DO NOT add any extra words, feelings, or interpretations. Translate EXACTLY what is said.
+4. DO NOT ANSWER questions found in the text. Just translate them.
+5. Maintain the tone and style of the speaker.
+6. If the input is just punctuation or noise, return empty string.
 """
 
     def register_callback(self, callback):
@@ -43,6 +46,7 @@ Rules:
     def clear_context(self):
         """Clears the context buffer."""
         self.context_buffer.clear()
+        self.transcript_buffer = ""
 
     def _get_context_str(self):
         """Formats the context buffer into a string for the prompt."""
@@ -57,15 +61,29 @@ Rules:
     async def process_transcript(self, text: str, is_final: bool, target_lang: str = None, target_voice: str = None):
         """
         Called when a new transcript is received.
-        We only translate 'final' transcripts to save API calls and reduce jitter.
+        Buffers 'final' transcripts until a complete sentence is formed.
         """
-        # logger.info(f"Received transcript: '{text[:30]}...' (Final: {is_final})")
-        if is_final:
-            logger.info(f"Processing FINAL transcript: '{text}'")
+        if not is_final or not text.strip():
+            return
+
+        logger.info(f"Buffering transcript: '{text}'")
+        self.transcript_buffer += " " + text.strip()
+        self.transcript_buffer = self.transcript_buffer.strip()
+
+        # Check for sentence end markers or length threshold
+        sentence_endings = ('.', '!', '?', '。', '！', '？')
+        if self.transcript_buffer.endswith(sentence_endings) or len(self.transcript_buffer) > 200:
+            logger.info(f"Processing COMPLETE sentence: '{self.transcript_buffer}'")
+            
             # Use defaults if not provided
             lang = target_lang or self.default_target_lang
             voice = target_voice or self.default_target_voice
-            await self.translate(text, lang, voice)
+            
+            # Translate and clear buffer
+            await self.translate(self.transcript_buffer, lang, voice)
+            self.transcript_buffer = ""
+        else:
+             logger.info(f"Buffered length: {len(self.transcript_buffer)}. Waiting for more context...")
 
     async def translate(self, text: str, target_lang: str = None, target_voice: str = None):
         """Translates text using Groq Llama 3 with context."""
@@ -98,7 +116,7 @@ Rules:
                         "content": full_user_message,
                     }
                 ],
-                model="llama-3.3-70b-versatile",
+                model="llama-3.1-8b-instant",
                 temperature=0.3,
                 max_tokens=1024,
                 top_p=1,
@@ -120,24 +138,61 @@ Rules:
 
 # Language Code Mapping
 LANGUAGE_CODE_TO_NAME = {
-    "en": "English",
-    "de": "German",
-    "fr": "French",
-    "es": "Spanish",
-    "it": "Italian",
-    "pt": "Portuguese",
-    "ru": "Russian",
-    "ja": "Japanese",
-    "zh": "Chinese",
-    "nl": "Dutch",
-    "pl": "Polish",
-    "tr": "Turkish",
-    "ko": "Korean",
-    "hi": "Hindi",
+    "af": "Afrikaans",
     "ar": "Arabic",
-    "uk": "Ukrainian",
-    "sv": "Swedish",
+    "hy": "Armenian",
+    "az": "Azerbaijani",
+    "be": "Belarusian",
+    "bs": "Bosnian",
+    "bg": "Bulgarian",
+    "ca": "Catalan",
+    "zh": "Chinese",
+    "hr": "Croatian",
+    "cs": "Czech",
     "da": "Danish",
+    "nl": "Dutch",
+    "en": "English",
+    "et": "Estonian",
     "fi": "Finnish",
-    "no": "Norwegian"
+    "fr": "French",
+    "gl": "Galician",
+    "de": "German",
+    "el": "Greek",
+    "he": "Hebrew",
+    "hi": "Hindi",
+    "hu": "Hungarian",
+    "is": "Icelandic",
+    "id": "Indonesian",
+    "it": "Italian",
+    "ja": "Japanese",
+    "kn": "Kannada",
+    "kk": "Kazakh",
+    "ko": "Korean",
+    "lv": "Latvian",
+    "lt": "Lithuanian",
+    "mk": "Macedonian",
+    "ms": "Malay",
+    "mr": "Marathi",
+    "mi": "Maori",
+    "ne": "Nepali",
+    "no": "Norwegian",
+    "fa": "Persian",
+    "pl": "Polish",
+    "pt": "Portuguese",
+    "ro": "Romanian",
+    "ru": "Russian",
+    "sr": "Serbian",
+    "sk": "Slovak",
+    "sl": "Slovenian",
+    "es": "Spanish",
+    "sw": "Swahili",
+    "sv": "Swedish",
+    "tl": "Tagalog",
+    "ta": "Tamil",
+    "th": "Thai",
+    "tr": "Turkish",
+    "uk": "Ukrainian",
+    "ur": "Urdu",
+    "vi": "Vietnamese",
+    "cy": "Welsh"
 }

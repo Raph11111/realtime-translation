@@ -7,15 +7,6 @@ window.onerror = function (message, source, lineno, colno, error) {
     }
     console.error("Global Error:", message, error);
 };
-// Global Error Handler - MUST BE FIRST
-window.onerror = function (message, source, lineno, colno, error) {
-    const status = document.getElementById('connectionStatus');
-    if (status) {
-        status.innerHTML = `<span class="text" style="color: #ef4444;">Error: ${message}</span>`;
-        status.classList.add('error');
-    }
-    console.error("Global Error:", message, error);
-};
 
 // Debug: Set status to Initializing
 const statusDebug = document.getElementById('connectionStatus');
@@ -31,11 +22,12 @@ const translatedText = document.getElementById('translatedText');
 const sourceLangSelect = document.getElementById('sourceLang');
 const targetLangSelect = document.getElementById('targetLang');
 const targetVoiceSelect = document.getElementById('targetVoice');
-const audioInputSelect = document.getElementById('audioInput');
 const canvas = document.getElementById('audioVisualizer');
+const sourceLangBadge = document.getElementById('sourceLangBadge');
+const targetLangBadge = document.getElementById('targetLangBadge');
 
 // Check for missing elements
-if (!recordButton || !connectionStatus || !sourceLangSelect || !targetLangSelect || !targetVoiceSelect || !canvas) {
+if (!recordButton || !connectionStatus || !sourceLangSelect || !targetLangSelect || !targetVoiceSelect || !canvas || !sourceLangBadge || !targetLangBadge) {
     throw new Error("Missing required DOM elements!");
 }
 
@@ -48,14 +40,12 @@ let analyser;
 let source;
 let animationId;
 let wsTranscripts;
+let hasConnection = false;
 
-// Audio Playback Queue
-const audioQueue = [];
-let isPlaying = false;
+// Audio Playback State
+let nextStartTime = 0;
 
 async function playAudioChunk(arrayBuffer) {
-    // We need a separate AudioContext for playback if the visualizer one is busy or different
-    // But we can reuse the global audioContext if initialized.
     if (!audioContext) {
         audioContext = new (window.AudioContext || window.webkitAudioContext)();
     }
@@ -65,28 +55,27 @@ async function playAudioChunk(arrayBuffer) {
 
     try {
         const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
-        audioQueue.push(audioBuffer);
-        processQueue();
+
+        const source = audioContext.createBufferSource();
+        source.buffer = audioBuffer;
+        source.connect(audioContext.destination);
+
+        // Scheduling logic for smooth playback
+        const currentTime = audioContext.currentTime;
+
+        // If next start time is in the past (underrun), reset it to now
+        if (nextStartTime < currentTime) {
+            nextStartTime = currentTime;
+        }
+
+        source.start(nextStartTime);
+
+        // Advance next start time by duration of this chunk
+        nextStartTime += audioBuffer.duration;
+
     } catch (e) {
         console.error("Error decoding audio data", e);
     }
-}
-
-function processQueue() {
-    if (isPlaying || audioQueue.length === 0) return;
-
-    isPlaying = true;
-    const buffer = audioQueue.shift();
-    const source = audioContext.createBufferSource();
-    source.buffer = buffer;
-    source.connect(audioContext.destination);
-
-    source.onended = () => {
-        isPlaying = false;
-        processQueue();
-    };
-
-    source.start(0);
 }
 
 // Initialize WebSocket
@@ -105,6 +94,7 @@ function connectWebSocket() {
 
     wsTranscripts.onopen = () => {
         console.log("WebSocket Connected");
+        hasConnection = true;
         connectionStatus.classList.add('connected');
         connectionStatus.classList.remove('error');
         connectionStatus.querySelector('.text').textContent = 'Connected';
@@ -114,8 +104,10 @@ function connectWebSocket() {
 
     wsTranscripts.onclose = (event) => {
         console.log("WebSocket Disconnected", event);
+        hasConnection = false;
         connectionStatus.classList.remove('connected');
         connectionStatus.querySelector('.text').textContent = 'Disconnected';
+        setRecordingState(false);
         setTimeout(connectWebSocket, 3000); // Reconnect
     };
 
@@ -136,13 +128,36 @@ function connectWebSocket() {
                 const data = JSON.parse(event.data);
 
                 if (data.type === 'transcript') {
-                    if (data.is_final) {
-                        originalText.textContent = data.text;
+                    // Remove placeholder class on first text
+                    if (originalText.classList.contains('placeholder')) {
+                        originalText.textContent = '';
                         originalText.classList.remove('placeholder');
                     }
+
+                    if (data.is_final) {
+                        // For final transcripts, append with a space
+                        originalText.textContent += data.text + ' ';
+                        originalText.classList.remove('interim');
+                    } else {
+                        // For interim, show in a subtle way (could add styling)
+                        originalText.classList.add('interim');
+                    }
+
+                    // Auto-scroll to bottom
+                    originalText.scrollTop = originalText.scrollHeight;
+
                 } else if (data.type === 'translation') {
-                    translatedText.textContent = data.text;
-                    translatedText.classList.remove('placeholder');
+                    // Remove placeholder class on first text
+                    if (translatedText.classList.contains('placeholder')) {
+                        translatedText.textContent = '';
+                        translatedText.classList.remove('placeholder');
+                    }
+
+                    // Append translation with a space
+                    translatedText.textContent += data.text + ' ';
+
+                    // Auto-scroll to bottom
+                    translatedText.scrollTop = translatedText.scrollHeight;
                 }
             } catch (e) {
                 console.error("Error parsing WebSocket message", e);
@@ -169,25 +184,29 @@ function initVisualizer(stream) {
         animationId = requestAnimationFrame(draw);
         analyser.getByteFrequencyData(dataArray);
 
-        ctx.fillStyle = 'rgba(15, 23, 42, 0.2)'; // Fade effect
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        // Clear with transparency for trail effect? No, clean wipe for Lumia style
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
 
         const barWidth = (canvas.width / bufferLength) * 2.5;
         let barHeight;
         let x = 0;
 
         for (let i = 0; i < bufferLength; i++) {
-            barHeight = dataArray[i] / 2;
+            barHeight = dataArray[i] / 1.5; // Scale down slightly
 
-            // Gradient color based on height
-            const r = barHeight + 25 * (i / bufferLength);
-            const g = 250 * (i / bufferLength);
-            const b = 50;
+            // Gradient color based on height/position - Lumia Cyan/Purple
+            const gradient = ctx.createLinearGradient(0, canvas.height, 0, canvas.height - barHeight);
+            gradient.addColorStop(0, '#7000ff');
+            gradient.addColorStop(1, '#00ddff');
 
-            ctx.fillStyle = `rgb(${r},${g},${b})`;
-            ctx.fillRect(x, canvas.height - barHeight, barWidth, barHeight);
+            ctx.fillStyle = gradient;
 
-            x += barWidth + 1;
+            // Rounded bars
+            ctx.beginPath();
+            ctx.roundRect(x, canvas.height - barHeight, barWidth, barHeight, 5);
+            ctx.fill();
+
+            x += barWidth + 2;
         }
     }
 
@@ -204,6 +223,11 @@ function initVisualizer(stream) {
 
 // Recording Logic
 async function toggleRecording() {
+    if (!wsTranscripts || wsTranscripts.readyState !== WebSocket.OPEN) {
+        alert("Waiting for server connection before starting.");
+        return;
+    }
+
     if (!isRecording) {
         try {
             // Request microphone access
@@ -212,10 +236,8 @@ async function toggleRecording() {
             // Start Visualizer
             initVisualizer(stream);
 
-            isRecording = true;
-            recordButton.classList.add('recording');
-            document.querySelector('.badge').classList.add('active');
-            recordButton.querySelector('.label').textContent = 'Stop Translation';
+            setRecordingState(true);
+            sendControl('start');
 
             // Resume AudioContext if suspended (browser policy)
             if (audioContext && audioContext.state === 'suspended') {
@@ -227,22 +249,40 @@ async function toggleRecording() {
             alert("Microphone access required for visualizer.");
         }
     } else {
-        isRecording = false;
-        recordButton.classList.remove('recording');
-        document.querySelector('.badge').classList.remove('active');
-        recordButton.querySelector('.label').textContent = 'Start Live Translation';
+        setRecordingState(false);
+        sendControl('stop');
 
         if (audioContext) {
             // Don't close audioContext as we need it for playback
-            // audioContext.close(); 
-            cancelAnimationFrame(animationId);
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            if (animationId) {
+                cancelAnimationFrame(animationId);
+            }
+            if (ctx) {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+            }
         }
     }
 }
 
+function setRecordingState(active) {
+    isRecording = active;
+    recordButton.classList.toggle('recording', active);
+    // Badge animation handled by CSS on status indicator if needed, 
+    // but button pulse is enough.
+    const labelSpan = recordButton.querySelector('.label');
+    if (labelSpan) labelSpan.textContent = active ? 'Stop Translation' : 'Start Translation';
+}
+
 // Configuration
 function updateConfig() {
+    // Update Badges
+    if (sourceLangBadge && sourceLangSelect) {
+        sourceLangBadge.textContent = sourceLangSelect.value.toUpperCase();
+    }
+    if (targetLangBadge && targetLangSelect) {
+        targetLangBadge.textContent = targetLangSelect.value.toUpperCase();
+    }
+
     if (wsTranscripts && wsTranscripts.readyState === WebSocket.OPEN) {
         const sourceLang = sourceLangSelect.value;
         const targetLang = targetLangSelect.value;
@@ -257,58 +297,15 @@ function updateConfig() {
     }
 }
 
-// Audio Device Management
-async function fetchAudioDevices() {
-    try {
-        const response = await fetch('/api/devices');
-        const devices = await response.json();
-
-        audioInputSelect.innerHTML = ''; // Clear loading option
-
-        if (devices.length === 0) {
-            const option = document.createElement('option');
-            option.text = "No devices found";
-            audioInputSelect.add(option);
-            return;
-        }
-
-        devices.forEach(device => {
-            const option = document.createElement('option');
-            option.value = device.index;
-            option.text = device.name;
-            if (device.is_default) {
-                option.selected = true;
-            }
-            audioInputSelect.add(option);
-        });
-    } catch (error) {
-        console.error("Error fetching audio devices:", error);
-        audioInputSelect.innerHTML = '<option>Error loading devices</option>';
-    }
-}
-
-async function changeAudioDevice() {
-    const deviceIndex = parseInt(audioInputSelect.value);
-    console.log("Switching to device index:", deviceIndex);
-
-    try {
-        const response = await fetch('/api/devices', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ device_index: deviceIndex })
-        });
-
-        const result = await response.json();
-        if (result.status === 'success') {
-            console.log("Device switched successfully");
-        } else {
-            console.error("Failed to switch device:", result.message);
-            alert("Failed to switch device: " + result.message);
-        }
-    } catch (error) {
-        console.error("Error switching device:", error);
+function sendControl(action) {
+    if (wsTranscripts && wsTranscripts.readyState === WebSocket.OPEN) {
+        wsTranscripts.send(JSON.stringify({
+            type: 'control',
+            action,
+            source_lang: sourceLangSelect.value,
+            target_lang: targetLangSelect.value,
+            target_voice: targetVoiceSelect.value
+        }));
     }
 }
 
@@ -317,8 +314,8 @@ recordButton.addEventListener('click', toggleRecording);
 sourceLangSelect.addEventListener('change', updateConfig);
 targetLangSelect.addEventListener('change', updateConfig);
 targetVoiceSelect.addEventListener('change', updateConfig);
-audioInputSelect.addEventListener('change', changeAudioDevice);
 
 // Init
-fetchAudioDevices();
+// Trigger initial badge update
+updateConfig();
 connectWebSocket();

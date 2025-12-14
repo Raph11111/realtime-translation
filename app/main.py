@@ -12,6 +12,7 @@ from app.services.audio_capture import AudioCaptureService
 from app.services.transcription import TranscriptionService
 from app.services.translation import TranslationService
 from app.services.tts import TTSService
+from app.services.room_manager import room_manager
 
 # Load environment variables
 load_dotenv()
@@ -31,7 +32,7 @@ transcript_clients = set()
 
 async def broadcast_transcript(text: str, is_final: bool):
     """Callback to broadcast transcripts to connected clients."""
-    # 1. Broadcast original transcript
+    # 1. Broadcast original transcript to legacy clients
     if transcript_clients:
         message = json.dumps({
             "type": "transcript",
@@ -49,13 +50,19 @@ async def broadcast_transcript(text: str, is_final: bool):
         for client in disconnected_clients:
             transcript_clients.remove(client)
 
-    # 2. Send to Translation Service
+    # 2. Broadcast to all active rooms
+    for room in room_manager.rooms.values():
+        if room.is_active:
+            await room_manager.broadcast_transcript_to_room(room.room_id, text, is_final)
+
+    # 3. Send to Translation Service
     await translation_service.process_transcript(text, is_final)
 
 async def broadcast_translation(text: str, voice: str = None):
     """Callback to broadcast translations to connected clients."""
     logger.info(f"Broadcasting translation: '{text[:20]}...' with voice: {voice}")
-    # 1. Broadcast text translation
+    
+    # 1. Broadcast text translation to legacy clients
     if transcript_clients:
         message = json.dumps({
             "type": "translation",
@@ -72,25 +79,41 @@ async def broadcast_translation(text: str, voice: str = None):
         for client in disconnected_clients:
             transcript_clients.remove(client)
 
-    # 2. Send to TTS Service
+    # 2. Broadcast to all active room channels
+    # Get the target language from translation_service
+    target_lang = translation_service.default_target_lang
+    for room in room_manager.rooms.values():
+        if room.is_active and target_lang in room.channels:
+            await room_manager.broadcast_translation_to_channel(
+                room.room_id, target_lang, text
+            )
+
+    # 3. Send to TTS Service
     await tts_service.process_translation(text, voice)
 
 async def broadcast_audio(chunk: bytes):
     """Callback to broadcast TTS audio to connected clients."""
-    if not transcript_clients:
-        logger.warning(f"Audio generated ({len(chunk)} bytes) but no clients connected!")
-        return
+    # 1. Broadcast to legacy clients
+    if transcript_clients:
+        logger.info(f"Broadcasting audio chunk ({len(chunk)} bytes) to {len(transcript_clients)} legacy clients")
+        disconnected_clients = set()
+        for client in transcript_clients:
+            try:
+                await client.send_bytes(chunk)
+            except Exception:
+                disconnected_clients.add(client)
+                
+        for client in disconnected_clients:
+            transcript_clients.remove(client)
+    
+    # 2. Broadcast to all active room channels
+    target_lang = translation_service.default_target_lang
+    for room in room_manager.rooms.values():
+        if room.is_active and target_lang in room.channels:
+            await room_manager.broadcast_audio_to_channel(
+                room.room_id, target_lang, chunk
+            )
 
-    logger.info(f"Broadcasting audio chunk ({len(chunk)} bytes) to {len(transcript_clients)} clients")
-    disconnected_clients = set()
-    for client in transcript_clients:
-        try:
-            await client.send_bytes(chunk)
-        except Exception:
-            disconnected_clients.add(client)
-            
-    for client in disconnected_clients:
-        transcript_clients.remove(client)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -123,37 +146,14 @@ async def lifespan(app: FastAPI):
 async def feed_audio_to_transcription():
     """Background task to pipe audio from capture to transcription."""
     logger.info("Starting audio feed to transcription engine")
-    import time
-    last_keep_alive = time.time()
-    chunk_count = 0
-    
     while True:
         try:
-            try:
-                # Wait for audio with a timeout
-                chunk = await asyncio.wait_for(audio_service.get_audio_chunk(), timeout=3.0)
-                if chunk:
-                    await transcription_service.send_audio(chunk)
-                    
-                    chunk_count += 1
-                    if chunk_count % 100 == 0:
-                        logger.info(f"Sent {chunk_count} chunks to Deepgram. Last size: {len(chunk)}")
-
-            except asyncio.TimeoutError:
-                logger.warning("No audio received for 3 seconds. Sending KeepAlive...")
-                await transcription_service.send_keep_alive()
-                last_keep_alive = time.time()
-                
-                # Check audio service status
-                if audio_service.is_running:
-                    logger.warning("Audio service is running but no data received.")
-                else:
-                    logger.warning("Audio service is NOT running. Attempting to start...")
-                    await audio_service.start_stream()
-                    
+            chunk = await audio_service.get_audio_chunk()
+            if chunk:
+                await transcription_service.send_audio(chunk)
         except Exception as e:
             logger.error(f"Error feeding audio to transcription: {e}")
-            await asyncio.sleep(1.0)
+            await asyncio.sleep(0.01) # Short sleep to prevent tight loop on error
 
 from fastapi.staticfiles import StaticFiles
 
@@ -171,33 +171,40 @@ app.add_middleware(
 # Mount static files
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
+# Include Room API router
+from app.api import api_router
+app.include_router(api_router)
+
 from fastapi.responses import FileResponse
 
 @app.get("/")
 async def root():
     return FileResponse("app/static/index.html")
 
-@app.get("/api/devices")
-async def get_audio_devices():
-    """Returns a list of available audio input devices."""
-    return audio_service.list_input_devices()
+@app.get("/host")
+async def host_dashboard():
+    """Host Dashboard for creating and managing translation rooms."""
+    return FileResponse("app/static/host.html")
 
-from pydantic import BaseModel
+@app.get("/join/{room_id}")
+async def join_room(room_id: str):
+    """Listener page for joining a translation room."""
+    return FileResponse("app/static/listener.html")
 
-class DeviceSelection(BaseModel):
-    device_index: int
+@app.get("/api/stats")
+async def get_stats():
+    """Get system statistics."""
+    return {
+        "active_rooms": len(room_manager.rooms),
+        "total_listeners": sum(r.get_total_listeners() for r in room_manager.rooms.values()),
+        "transcription_connected": transcription_service.is_connected if hasattr(transcription_service, 'is_connected') else False,
+        "status": "running"
+    }
 
-@app.post("/api/devices")
-async def select_audio_device(selection: DeviceSelection):
-    """Switches the active audio input device."""
-    try:
-        await audio_service.set_device(selection.device_index)
-        return {"status": "success", "message": f"Switched to device index {selection.device_index}"}
-    except ValueError as e:
-        return {"status": "error", "message": str(e)}
-    except Exception as e:
-        logger.error(f"Error switching device: {e}")
-        return {"status": "error", "message": "Internal server error"}
+@app.get("/healthz")
+async def health_check():
+    """Health check endpoint for container orchestration."""
+    return {"status": "healthy"}
 
 
 @app.websocket("/ws/audio")
