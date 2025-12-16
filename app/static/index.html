@@ -173,16 +173,17 @@
                     </div>
 
                     <div class="control-group">
-                        <label>AI Voice</label>
+                        <label>AI Voice <span
+                                style="font-size: 0.75rem; color: var(--accent-secondary);">(ElevenLabs)</span></label>
                         <div class="select-wrapper">
                             <select id="targetVoice">
-                                <option value="alloy" selected>Alloy (Neutral)</option>
-                                <option value="echo">Echo (Male)</option>
-                                <option value="fable">Fable (British)</option>
-                                <option value="onyx">Onyx (Deep Male)</option>
-                                <option value="nova">Nova (Female)</option>
-                                <option value="shimmer">Shimmer (Female)</option>
+                                <option value="">Loading voices...</option>
                             </select>
+                        </div>
+                        <div style="margin-top: 8px; font-size: 0.75rem; color: var(--text-secondary);">
+                            🎤 <a href="https://elevenlabs.io/voice-lab" target="_blank"
+                                style="color: var(--accent-secondary); text-decoration: none;">Clone your voice</a> in
+                            ElevenLabs → refresh to see it here
                         </div>
                     </div>
 

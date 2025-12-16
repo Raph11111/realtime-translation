@@ -45,6 +45,57 @@ let hasConnection = false;
 // Audio Playback State
 let nextStartTime = 0;
 
+// Load ElevenLabs voices from API
+async function loadVoices() {
+    try {
+        const response = await fetch('/api/voices');
+        if (!response.ok) throw new Error('Failed to fetch voices');
+
+        const data = await response.json();
+        const voices = data.voices;
+
+        // Clear existing options
+        targetVoiceSelect.innerHTML = '';
+
+        // Group voices by category
+        const clonedVoices = voices.filter(v => v.category === 'cloned');
+        const premadeVoices = voices.filter(v => v.category !== 'cloned');
+
+        // Add cloned voices first if any
+        if (clonedVoices.length > 0) {
+            const clonedGroup = document.createElement('optgroup');
+            clonedGroup.label = '🎤 Your Cloned Voices';
+            clonedVoices.forEach(voice => {
+                const option = document.createElement('option');
+                option.value = voice.voice_id;
+                option.textContent = voice.name;
+                clonedGroup.appendChild(option);
+            });
+            targetVoiceSelect.appendChild(clonedGroup);
+        }
+
+        // Add premade voices
+        if (premadeVoices.length > 0) {
+            const premadeGroup = document.createElement('optgroup');
+            premadeGroup.label = '✨ ElevenLabs Voices';
+            premadeVoices.forEach(voice => {
+                const option = document.createElement('option');
+                option.value = voice.voice_id;
+                option.textContent = voice.name;
+                premadeGroup.appendChild(option);
+            });
+            targetVoiceSelect.appendChild(premadeGroup);
+        }
+
+        console.log(`Loaded ${voices.length} voices from ElevenLabs`);
+
+    } catch (error) {
+        console.error('Error loading voices:', error);
+        // Fallback: add a default option
+        targetVoiceSelect.innerHTML = '<option value="21m00Tcm4TlvDq8ikWAM">Rachel (Default)</option>';
+    }
+}
+
 async function playAudioChunk(arrayBuffer) {
     if (!audioContext) {
         audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -316,6 +367,13 @@ targetLangSelect.addEventListener('change', updateConfig);
 targetVoiceSelect.addEventListener('change', updateConfig);
 
 // Init
-// Trigger initial badge update
-updateConfig();
-connectWebSocket();
+async function init() {
+    // Load voices first
+    await loadVoices();
+    // Trigger initial badge update
+    updateConfig();
+    // Connect WebSocket
+    connectWebSocket();
+}
+
+init();
